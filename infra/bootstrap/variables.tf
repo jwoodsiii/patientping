@@ -31,5 +31,5 @@ variable "github_org" {
 variable "github_repo" {
   description = "GitHub repository name"
   type        = string
-  default     = "boot-dev-aws"
+  default     = "patientping"
 }
