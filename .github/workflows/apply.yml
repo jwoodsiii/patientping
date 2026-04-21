@@ -1,0 +1,76 @@
+name: terraform-apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**/*.tf"
+      - ".github/workflows/apply.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.9.0"
+  AWS_REGION: "us-east-1"
+  APPLY_ROLE_ARN: ${{ vars.TF_APPLY_ROLE_ARN }}
+
+jobs:
+  apply:
+    name: Apply
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        stack: [prod]
+      # Don't run stacks in parallel they share the state bucket and lock table
+      max-parallel: 1
+
+    defaults:
+      run:
+        working-directory: infra/${{ matrix.stack }}
+
+    # The `environment` declaration is what causes GHA to include the
+    # `environment:production` claim in the OIDC token. The apply role's trust
+    # policy requires this claim - so the role is unreachable unless this job
+    # has been approved through GHA's environment protection rules.
+    # Configure required reviewers in: repo Settings → Environments → production
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # Commit SHA + run ID makes every CloudTrail entry traceable to a
+          # specific merge commit and workflow run.
+          role-session-name: gha-apply-${{ github.sha }}-run${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan.binary
+
+      # Re-scan at apply time. Catches cases where:
+      # - Scan policy rules changed between PR merge and apply
+      # - main drifted between the PR scan and this run
+      # Hard fail here - we don't apply if scans are failing at deploy time.
+      - name: Checkov scan (hard fail)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          file: tfplan.binary
+          framework: terraform_plan
+          soft_fail: false
+
+      - name: Terraform apply
+        run: terraform apply tfplan.binary

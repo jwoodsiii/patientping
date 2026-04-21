@@ -1,0 +1,105 @@
+name: terraform-scan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**/*.tf"
+      - ".github/workflows/scan.yml"
+
+# id-token: write is required for GHA to mint the OIDC JWT.
+# Without it the token is never issued and aws-actions/configure-aws-credentials fails.
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write # for posting plan output as a PR comment
+  security-events: write # for uploading SARIF to the GitHub Security tab
+
+env:
+  TF_VERSION: "1.9.0"
+  AWS_REGION: "us-east-1"
+  # Role ARN is an output from the bootstrap stack. stored GHA variable
+  # (repo Settings → Variables) rather than hardcoding here, so the same
+  # workflow file works across forks and future projects.
+  SCAN_ROLE_ARN: ${{ vars.TF_SCAN_ROLE_ARN }}
+
+jobs:
+  scan:
+    name: Plan + Scan
+    runs-on: ubuntu-latest
+
+    # Each stack gets its own job so failures are scoped.
+    # Add a job per stack (bootstrap, prod, etc.) as the repo grows.
+    strategy:
+      matrix:
+        stack: [prod]
+
+    defaults:
+      run:
+        working-directory: infra/${{ matrix.stack }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.SCAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # PR number + run ID in the session name, so every CloudTrail entry
+          # traces back to a specific PR and run.
+          role-session-name: gha-scan-pr${{ github.event.pull_request.number }}-run${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate
+        run: terraform validate
+
+      # Produce a plan file, then convert to json for scanning.
+      # json scan means variables/substituion are all resolved during scan.
+      - name: Terraform plan
+        run: |
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > tfplan.json
+
+      - name: Checkov scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          file: tfplan.json
+          framework: terraform_plan
+          # soft_fail on PRs: findings appear as annotations without blocking merge.
+          soft_fail: true
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+
+      - name: tfsec scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: true
+
+      - name: Install conftest
+        run: |
+          curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.55.0/conftest_0.55.0_Linux_x86_64.tar.gz \
+            | tar xz
+          sudo mv conftest /usr/local/bin
+
+      # OPA policies live in infra/policy/ as .rego files.
+      # Add infra/policy/<rule>.rego + infra/policy/<rule>_test.rego
+      - name: Conftest OPA policies
+        run: conftest test tfplan.json -p ../../policy/
+        continue-on-error: true # remove once you have policies defined
+
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
