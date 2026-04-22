@@ -59,7 +59,9 @@ jobs:
         run: terraform init
 
       - name: Terraform plan
-        run: terraform plan -out=tfplan.binary
+        run: |
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > tfplan.json
 
       # Re-scan at apply time. Catches cases where:
       # - Scan policy rules changed between PR merge and apply
@@ -68,9 +70,18 @@ jobs:
       - name: Checkov scan (hard fail)
         uses: bridgecrewio/checkov-action@v12
         with:
-          file: tfplan.binary
+          file: infra/${{ matrix.stack }}/tfplan.json
           framework: terraform_plan
           soft_fail: false
+
+      - name: Verify Checkov produced results
+        run: |
+          COUNT=$(cat results.sarif | jq '.runs[0].results | length')
+          echo "Checkov result count: $COUNT"
+          if [ "$COUNT" -eq "0" ]; then
+            echo "Checkov produced no results — likely a parse error. Blocking apply."
+            exit 1
+          fi
 
       - name: Terraform apply
         run: terraform apply tfplan.binary
