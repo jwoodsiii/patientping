@@ -73,7 +73,6 @@ jobs:
           file: infra/${{ matrix.stack }}/tfplan.json
           framework: terraform_plan
           soft_fail: false
-
       - name: Verify Checkov produced results
         run: |
           COUNT=$(cat results.sarif | jq '.runs[0].results | length')
