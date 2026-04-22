@@ -107,9 +107,10 @@ resource "aws_route_table_association" "private" {
 }
 
 resource "aws_cloudwatch_log_group" "flow_logs" {
-  name = "/aws/vpc/patientping-flow-logs"
-  #checkov:skip=CKV_AWS_338,CKV_AWS_158:Flow logs retention at 7 days to stay under free tier, no KMS to keep cost minimal
+  name              = "/aws/vpc/patientping-flow-logs"
   retention_in_days = 7
+  #checkov:skip=CKV_AWS_338:Retention at 7 days to stay within free tier for personal project
+  #checkov:skip=CKV_AWS_158:KMS encryption not used, cost not justified for personal project
 
   tags = local.common_tags
 }

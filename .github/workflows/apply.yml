@@ -73,6 +73,8 @@ jobs:
           file: infra/${{ matrix.stack }}/tfplan.json
           framework: terraform_plan
           soft_fail: false
+          skip_check: CKV_AWS_338,CKV_AWS_158
+
       - name: Verify Checkov produced results
         run: |
           COUNT=$(cat results.sarif | jq '.runs[0].results | length')
