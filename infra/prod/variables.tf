@@ -7,5 +7,5 @@ variable "aws_region" {
 variable "project" {
   description = "Project name - applied as a tag to all resources"
   type        = string
-  default     = "bootdev-aws"
+  default     = "patientping"
 }

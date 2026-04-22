@@ -79,7 +79,7 @@ jobs:
           # soft_fail on PRs: findings appear as annotations without blocking merge.
           soft_fail: true
           output_format: cli,sarif
-          output_file_path: console,checkov.sarif
+          output_file_path: console,infra/${{ matrix.stack }}/checkov.sarif
 
       - name: tfsec scan
         uses: aquasecurity/tfsec-action@v1.0.3
@@ -102,4 +102,4 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: checkov.sarif
+          sarif_file: infra/${{ matrix.stack }}/checkov.sarif
