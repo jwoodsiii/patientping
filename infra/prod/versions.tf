@@ -12,10 +12,10 @@ terraform {
   # The key is the only thing that changes per stack - it namespaces state
   # within the shared bucket.
   backend "s3" {
-    bucket         = "jwoodsiii-tfstate-bootdev"
+    bucket         = "tfstate-patientping-bucket"
     key            = "prod/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "jwoodsiii-tfstate-locks"
+    dynamodb_table = "tfstate-patientping-locks"
     encrypt        = true
   }
 }
