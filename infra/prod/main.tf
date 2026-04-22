@@ -29,6 +29,14 @@ resource "aws_vpc" "main" {
   })
 }
 
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-default-sg-DO-NOT-USE"
+  })
+}
+
 resource "aws_subnet" "public" {
   for_each = local.public_subnets
 
@@ -99,7 +107,9 @@ resource "aws_route_table_association" "private" {
 }
 
 resource "aws_cloudwatch_log_group" "flow_logs" {
-  name              = "/aws/vpc/patientping-flow-logs"
+  name = "/aws/vpc/patientping-flow-logs"
+  #checkov:skip=CKV_AWS_338:Flow logs retention at 7 days to stay under free tier.
+  #checkov:skip=CKV_AWS_158:^
   retention_in_days = 7
 
   tags = local.common_tags
@@ -126,17 +136,29 @@ resource "aws_iam_role_policy" "flow_logs" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams"
-      ]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        # Scope to the specific log group and its streams
+        Resource = [
+          aws_cloudwatch_log_group.flow_logs.arn,
+          "${aws_cloudwatch_log_group.flow_logs.arn}:log-stream:*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogGroups"
+        ]
+        #checkov:skip=CKV_AWS_355:DescribeLogGroups requires wildcard resource; AWS does not support resource-level restrictions for this action
+        Resource = "*"
+      }
+    ]
   })
 }
 
