@@ -48,7 +48,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           # Commit SHA + run ID makes every CloudTrail entry traceable to a
           # specific merge commit and workflow run.
-          role-session-name: gha-${{ hashFiles(format('{0}-{1}', github.sha, github.run_id)) | slice(0, 56) }}
+          role-session-name: gha-${{ github.sha }}-${{ github.run_id }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
