@@ -1,71 +1,152 @@
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+locals {
+  azs = ["us-east-1a", "us-east-1b"]
 
-  name = var.project
-  cidr = "10.0.0.0/22"
-  azs  = ["us-east-1a", "us-east-1b"]
+  private_subnets = {
+    "patientping-private-a" = { cidr = "10.0.0.0/24", az = "us-east-1a" }
+    "patientping-private-b" = { cidr = "10.0.1.0/24", az = "us-east-1b" }
+  }
 
-  private_subnets = ["10.0.0.0/24", "10.0.1.0/24"]
-  public_subnets  = ["10.0.2.0/24", "10.0.3.0/24"]
+  public_subnets = {
+    "patientping-public-a" = { cidr = "10.0.2.0/24", az = "us-east-1a" }
+    "patientping-public-b" = { cidr = "10.0.3.0/24", az = "us-east-1b" }
+  }
 
-  private_subnet_names = ["patientping-private-a", "patientping-private-b"]
-  public_subnet_names  = ["patientping-public-a", "patientping-public-b"]
-
-  # Disable the module's IGW and public route table so we own them below.
-  # The module will still create the public subnets themselves.
-  create_igw = false
-
-  tags = {
+  common_tags = {
     Terraform   = "true"
     Environment = "prod"
+    Project     = var.project
   }
 }
 
-resource "aws_internet_gateway" "this" {
-  vpc_id = module.vpc.vpc_id
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/22"
 
-  tags = {
-    Name        = "patientping-igw"
-    Terraform   = "true"
-    Environment = "prod"
-  }
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-vpc"
+  })
+}
+
+resource "aws_subnet" "public" {
+  for_each = local.public_subnets
+
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = each.value.cidr
+  availability_zone = each.value.az
+
+  map_public_ip_on_launch = false
+
+  tags = merge(local.common_tags, {
+    Name = each.key
+  })
+}
+
+resource "aws_subnet" "private" {
+  for_each = local.private_subnets
+
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = each.value.cidr
+  availability_zone = each.value.az
+
+  tags = merge(local.common_tags, {
+    Name = each.key
+  })
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-igw"
+  })
 }
 
 resource "aws_route_table" "public" {
-  vpc_id = module.vpc.vpc_id
+  vpc_id = aws_vpc.main.id
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this.id
+    gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = {
-    Name        = "patientping-public-rt"
-    Terraform   = "true"
-    Environment = "prod"
-  }
+  tags = merge(local.common_tags, {
+    Name = "patientping-public-rt"
+  })
 }
 
 resource "aws_route_table_association" "public" {
-  count = length(module.vpc.public_subnets)
+  for_each = aws_subnet.public
 
-  subnet_id      = module.vpc.public_subnets[count.index]
+  subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
 }
 
 resource "aws_route_table" "private" {
-  vpc_id = module.vpc.vpc_id
+  vpc_id = aws_vpc.main.id
 
-  tags = {
-    Name        = "patientping-private-rt"
-    Terraform   = "true"
-    Environment = "prod"
-  }
+  tags = merge(local.common_tags, {
+    Name = "patientping-private-rt"
+  })
 }
 
 resource "aws_route_table_association" "private" {
-  count = length(module.vpc.private_subnets)
+  for_each = aws_subnet.private
 
-  subnet_id      = module.vpc.private_subnets[count.index]
+  subnet_id      = each.value.id
   route_table_id = aws_route_table.private.id
+}
+
+resource "aws_cloudwatch_log_group" "flow_logs" {
+  name              = "/aws/vpc/patientping-flow-logs"
+  retention_in_days = 7
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role" "flow_logs" {
+  name = "patientping-vpc-flow-logs-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "flow_logs" {
+  name = "patientping-vpc-flow-logs-policy"
+  role = aws_iam_role.flow_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "main" {
+  vpc_id          = aws_vpc.main.id
+  traffic_type    = "ALL"
+  iam_role_arn    = aws_iam_role.flow_logs.arn
+  log_destination = aws_cloudwatch_log_group.flow_logs.arn
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-flow-logs"
+  })
 }
