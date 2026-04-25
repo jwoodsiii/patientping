@@ -221,8 +221,8 @@ resource "aws_instance" "web" {
   key_name      = aws_key_pair.patientping.key_name
 
   primary_network_interface {
-    network_interface_id  = aws_network_interface.web.id
-    delete_on_termination = true
+    network_interface_id = aws_network_interface.web.id
+    # delete_on_termination = true
   }
 
   tags = merge(local.common_tags, {
