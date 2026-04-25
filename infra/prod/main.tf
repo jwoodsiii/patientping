@@ -172,3 +172,60 @@ resource "aws_flow_log" "main" {
     Name = "patientping-flow-logs"
   })
 }
+
+resource "aws_network_interface" "web" {
+  subnet_id       = aws_subnet.public["patientping-public-a"].id
+  security_groups = [aws_security_group.empty.id]
+
+  # No EIP attached = no public IP, matching course instructions
+  # to disable auto-assign public IP
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-web-eni"
+  })
+}
+
+resource "aws_security_group" "empty" {
+  name        = "patientping-empty"
+  description = "Placeholder security group for PatientPing server"
+  vpc_id      = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-empty"
+  })
+}
+
+resource "aws_key_pair" "patientping" {
+  key_name   = "patientping-key"
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKOboFdBZPUvqc4hMnDbMF081cXF3YQUYt0973vfVCk0 patientping-key"
+}
+
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_instance" "web" {
+  ami           = data.aws_ami.amazon_linux.id
+  instance_type = "t3.micro"
+  key_name      = aws_key_pair.patientping.key_name
+
+  primary_network_interface {
+    network_interface_id  = aws_network_interface.web.id
+    delete_on_termination = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "patientping-web"
+  })
+}

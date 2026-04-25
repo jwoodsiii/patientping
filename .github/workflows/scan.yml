@@ -79,6 +79,7 @@ jobs:
           # soft_fail on PRs: findings appear as annotations without blocking merge.
           soft_fail: true
           skip_check: CKV_AWS_338,CKV_AWS_158
+          baseline: infra/${{ matrix.stack }}/.checkov.baseline
           output_format: cli,sarif
           output_file_path: console,infra/${{ matrix.stack }}/checkov.sarif
 

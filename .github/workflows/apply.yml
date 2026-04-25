@@ -74,6 +74,7 @@ jobs:
           framework: terraform_plan
           soft_fail: false
           skip_check: CKV_AWS_338,CKV_AWS_158
+          baseline: infra/${{ matrix.stack }}/.checkov.baseline
 
       - name: Verify Checkov produced results
         run: |
