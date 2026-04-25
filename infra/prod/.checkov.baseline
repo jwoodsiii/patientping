@@ -1,0 +1,25 @@
+{
+    "failed_checks": [
+        {
+            "file": "/tfplan.json",
+            "findings": [
+                {
+                    "resource": "aws_cloudwatch_log_group.flow_logs",
+                    "check_ids": [
+                        "CKV_AWS_158",
+                        "CKV_AWS_338"
+                    ]
+                },
+                {
+                    "resource": "aws_instance.web",
+                    "check_ids": [
+                        "CKV_AWS_126",
+                        "CKV_AWS_135",
+                        "CKV_AWS_79",
+                        "CKV_AWS_8"
+                    ]
+                }
+            ]
+        }
+    ]
+}
