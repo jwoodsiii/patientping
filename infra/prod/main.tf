@@ -220,6 +220,7 @@ resource "aws_instance" "web" {
   instance_type = "t3.micro"
   key_name      = aws_key_pair.patientping.key_name
 
+
   primary_network_interface {
     network_interface_id = aws_network_interface.web.id
     # delete_on_termination = true
@@ -227,5 +228,14 @@ resource "aws_instance" "web" {
 
   tags = merge(local.common_tags, {
     Name = "patientping-web"
+  })
+}
+
+resource "aws_eip" "web" {
+  domain            = "vpc"
+  instance          = aws_instance.web.id
+  network_interface = aws_network_interface.web.id
+  tags = merge(local.common_tags, {
+    Name = "patientping-web-eip"
   })
 }
