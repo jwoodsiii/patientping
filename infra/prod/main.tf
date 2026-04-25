@@ -17,6 +17,10 @@ locals {
     Project     = var.project
   }
 }
+# TODO: Remove once we swap to SSM for instance connections
+data "http" "my_ip" {
+  url = "https://checkip.amazonaws.com"
+}
 
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/22"
@@ -175,24 +179,39 @@ resource "aws_flow_log" "main" {
 
 resource "aws_network_interface" "web" {
   subnet_id       = aws_subnet.public["patientping-public-a"].id
-  security_groups = [aws_security_group.empty.id]
+  security_groups = [aws_security_group.patientping_public.id]
 
-  # No EIP attached = no public IP, matching course instructions
-  # to disable auto-assign public IP
 
   tags = merge(local.common_tags, {
     Name = "patientping-web-eni"
   })
 }
 
-resource "aws_security_group" "empty" {
-  name        = "patientping-empty"
-  description = "Placeholder security group for PatientPing server"
+resource "aws_security_group" "patientping_public" {
+  name        = "patientping-public"
+  description = "Security group for PatientPing server"
   vpc_id      = aws_vpc.main.id
 
+  # replacing standard default egress rule
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
   tags = merge(local.common_tags, {
-    Name = "patientping-empty"
+    Name = "patientping-public"
   })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
+  security_group_id = aws_security_group.patientping_public.id
+  ip_protocol       = "tcp"
+  from_port         = 22
+  to_port           = 22
+  cidr_ipv4         = "${chomp(data.http.my_ip.response_body)}/32"
 }
 
 resource "aws_key_pair" "patientping" {
@@ -219,7 +238,6 @@ resource "aws_instance" "web" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t3.micro"
   key_name      = aws_key_pair.patientping.key_name
-
 
   primary_network_interface {
     network_interface_id = aws_network_interface.web.id
