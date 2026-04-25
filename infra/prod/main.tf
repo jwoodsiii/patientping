@@ -251,8 +251,9 @@ resource "aws_instance" "web" {
 
 resource "aws_eip" "web" {
   domain            = "vpc"
-  instance          = aws_instance.web.id
   network_interface = aws_network_interface.web.id
+
+  depends_on = [aws_internet_gateway.main]
   tags = merge(local.common_tags, {
     Name = "patientping-web-eip"
   })
