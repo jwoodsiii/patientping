@@ -291,3 +291,8 @@ resource "aws_eip" "web" {
     Name = "patientping-web-eip"
   })
 }
+
+resource "aws_ami_from_instance" "patientping_web_base" {
+  name               = "patientping-web-base"
+  source_instance_id = aws_instance.web.id
+}
