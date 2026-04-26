@@ -214,6 +214,15 @@ resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
   cidr_ipv4         = "${chomp(data.http.my_ip.response_body)}/32"
 }
 
+# test application, no tls configured
+resource "aws_vpc_security_group_ingress_rule" "allow_http_ipv4" {
+  security_group_id = aws_security_group.patientping_public.id
+  ip_protocol       = "tcp"
+  from_port         = 8080
+  to_port           = 8080
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
 resource "aws_key_pair" "patientping" {
   key_name   = "patientping-key"
   public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKOboFdBZPUvqc4hMnDbMF081cXF3YQUYt0973vfVCk0 patientping-key"

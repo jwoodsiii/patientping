@@ -39,3 +39,5 @@ terraform.rc
 infra/**/*.binary
 infra/**/*.json
 !infra/**/variables.json  # if you use var files
+
+session-manager-plugin.pkg**
