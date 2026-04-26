@@ -234,10 +234,34 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+resource "aws_iam_role" "ec2_ssm" {
+  name = "patientping-ec2-ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_ssm" {
+  role       = aws_iam_role.ec2_ssm.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ec2_ssm" {
+  name = "patientping-ec2-ssm-profile"
+  role = aws_iam_role.ec2_ssm.name
+}
+
 resource "aws_instance" "web" {
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
-  key_name      = aws_key_pair.patientping.key_name
+  ami                  = data.aws_ami.amazon_linux.id
+  instance_type        = "t3.micro"
+  key_name             = aws_key_pair.patientping.key_name
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm.name
 
   primary_network_interface {
     network_interface_id = aws_network_interface.web.id
