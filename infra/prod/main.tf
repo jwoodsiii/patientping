@@ -281,22 +281,6 @@ resource "aws_iam_role_policy" "ec2_eip" {
   })
 }
 
-resource "aws_instance" "web" {
-  ami                  = data.aws_ami.amazon_linux.id
-  instance_type        = "t3.micro"
-  key_name             = aws_key_pair.patientping.key_name
-  iam_instance_profile = aws_iam_instance_profile.ec2_ssm.name
-
-  primary_network_interface {
-    network_interface_id = aws_network_interface.web.id
-    # delete_on_termination = true
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "patientping-web"
-  })
-}
-
 resource "aws_eip" "web" {
   domain            = "vpc"
   network_interface = aws_network_interface.web.id
@@ -308,51 +292,52 @@ resource "aws_eip" "web" {
 }
 
 # replacing aws_ami_from_instance with a data source
-# data "aws_ami" "patientping_web_base" {
-#   most_recent = true
-#   owners      = ["self"]
+data "aws_ami" "patientping_web_base" {
+  most_recent = true
+  owners      = ["self"]
 
-#   filter {
-#     name   = "name"
-#     values = ["patientping-web-base"]
-#   }
-# }
-
-resource "aws_ami_from_instance" "patientping_web_base" {
-  name               = "patientping-web-base"
-  source_instance_id = aws_instance.web.id
+  filter {
+    name   = "name"
+    values = ["patientping-web-base"]
+  }
 }
 
-# resource "aws_launch_template" "patientping_web_launcher" {
-#   name          = "patientping-web-launcher"
-#   description   = "Launch template for t3.micro with PatientPing app preinstalled"
-#   image_id      = data.aws_ami.patientping_web_base.id
-#   instance_type = "t3.micro"
-#   key_name      = aws_key_pair.patientping.key_name
-#   network_interfaces {
-#     subnet_id                   = aws_subnet.public["patientping-public-a"].id
-#     security_groups             = [aws_security_group.patientping_public.id]
-#     associate_public_ip_address = false
-#   }
-#   # would typically just drop this for ssm
-#   user_data = base64encode(<<-EOF
-#       #!/bin/bash
-#       INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-#       aws ec2 associate-address \
-#         --instance-id $INSTANCE_ID \
-#         --allocation-id ${aws_eip.web.id} \
-#         --region us-east-1
-#     EOF
-#   )
-# }
+resource "aws_launch_template" "patientping_web_launcher" {
+  name          = "patientping-web-launcher"
+  description   = "Launch template for t3.micro with PatientPing app preinstalled"
+  image_id      = data.aws_ami.patientping_web_base.id
+  instance_type = "t3.micro"
+  key_name      = aws_key_pair.patientping.key_name
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.ec2_ssm.arn
+  }
+  network_interfaces {
+    subnet_id                   = aws_subnet.public["patientping-public-a"].id
+    security_groups             = [aws_security_group.patientping_public.id]
+    associate_public_ip_address = false
+  }
+  # would typically just drop this for ssm
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/instance-id)
+    aws ec2 associate-address \
+      --instance-id $INSTANCE_ID \
+      --allocation-id ${aws_eip.web.id} \
+      --region us-east-1
+  EOF
+  )
+}
 
-# resource "aws_autoscaling_group" "patientping_asg" {
-#   name = "patientping-asg"
-#   launch_template {
-#     id      = aws_launch_template.patientping_web_launcher.id
-#     version = "$Latest"
-#   }
-#   min_size         = 1
-#   max_size         = 1
-#   desired_capacity = 1
-# }
+resource "aws_autoscaling_group" "patientping_asg" {
+  name = "patientping-asg"
+  launch_template {
+    id      = aws_launch_template.patientping_web_launcher.id
+    version = "$Latest"
+  }
+  min_size         = 1
+  max_size         = 1
+  desired_capacity = 1
+}
