@@ -298,7 +298,7 @@ data "aws_ami" "patientping_web_base" {
 
   filter {
     name   = "name"
-    values = ["patientping-web-base"]
+    values = ["patientping-web-base-v2"]
   }
 }
 
