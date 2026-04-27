@@ -304,7 +304,8 @@ resource "aws_launch_template" "patientping_web_launcher" {
   instance_type = "t3.micro"
   key_name      = aws_key_pair.patientping.key_name
   network_interfaces {
-    network_interface_id = aws_subnet.public["patientping-public-a"].id
+    network_interface_id = aws_network_interface.web.id
+    subnet_id            = aws_subnet.public["patientping-public-a"].id
     security_groups      = [aws_security_group.patientping_public.name]
   }
 }
