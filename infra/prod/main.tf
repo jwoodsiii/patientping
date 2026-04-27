@@ -316,7 +316,8 @@ resource "aws_launch_template" "patientping_web_launcher" {
     security_groups             = [aws_security_group.patientping_public.id]
     associate_public_ip_address = false
   }
-  # would typically just drop this for ssm
+  # would typically just drop this for ssm, add ssm endpoints, and remove eip entirely
+  # vpc endpoints aren't free tier eligible
   user_data = base64encode(<<-EOF
     #!/bin/bash
     TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
@@ -327,6 +328,8 @@ resource "aws_launch_template" "patientping_web_launcher" {
       --instance-id $INSTANCE_ID \
       --allocation-id ${aws_eip.web.id} \
       --region us-east-1
+
+    systemctl restart amazon-ssm-agent
   EOF
   )
 }
