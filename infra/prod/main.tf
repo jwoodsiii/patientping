@@ -306,6 +306,6 @@ resource "aws_launch_template" "patientping_web_launcher" {
   network_interfaces {
     network_interface_id = aws_network_interface.web.id
     subnet_id            = aws_subnet.public["patientping-public-a"].id
-    security_groups      = [aws_security_group.patientping_public.name]
+    security_groups      = [aws_security_group.patientping_public.id]
   }
 }
