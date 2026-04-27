@@ -296,3 +296,15 @@ resource "aws_ami_from_instance" "patientping_web_base" {
   name               = "patientping-web-base"
   source_instance_id = aws_instance.web.id
 }
+
+resource "aws_launch_template" "patientping_web_launcher" {
+  name          = "patientping-web-launcher"
+  description   = "Launch template for t3.micro with PatientPing app preinstalled"
+  image_id      = aws_ami_from_instance.patientping_web_base.id
+  instance_type = "t3.micro"
+  key_name      = aws_key_pair.patientping.key_name
+  network_interfaces {
+    network_interface_id = aws_subnet.public["patientping-public-a"].id
+    security_groups      = [aws_security_group.patientping_public.name]
+  }
+}
